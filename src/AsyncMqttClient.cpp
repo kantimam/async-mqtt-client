@@ -1,7 +1,8 @@
 #include "AsyncMqttClient.hpp"
 
 AsyncMqttClient::AsyncMqttClient()
-: _connected(false)
+: _tcpbuffer(&_client)
+, _connected(false)
 , _connectPacketNotEnoughSpace(false)
 , _disconnectOnPoll(false)
 , _tlsBadFingerprint(false)
@@ -874,12 +875,46 @@ uint16_t AsyncMqttClient::publish(const char* topic, uint8_t qos, bool retain, c
     packetIdBytes[1] = packetId & 0xFF;
   }
 
-  _client.add(fixedHeader, 1 + remainingLengthLength);
-  _client.add(topicLengthBytes, 2);
-  _client.add(topic, topicLength);
-  if (qos != 0) _client.add(packetIdBytes, 2);
-  if (payload != nullptr) _client.add(payload, payloadLength);
-  _client.send();
+  byte buffer[1500];
+  int bufferpointer = 0;
+
+//  _client.add(fixedHeader, 1 + remainingLengthLength);
+  for (int i = 0; i < 1 + remainingLengthLength; i++)
+  {
+    buffer[bufferpointer] = fixedHeader[i];
+    bufferpointer++;
+  }
+
+//  _client.add(topicLengthBytes, 2);
+  for (int i = 0; i < 2; i++)
+  {
+    buffer[bufferpointer] = topicLengthBytes[i];
+    bufferpointer++;
+  }
+
+//  _client.add(topic, topicLength);
+  for (int i = 0; i < topicLength; i++)
+  {
+    buffer[bufferpointer] = topic[i];
+    bufferpointer++;
+  }
+
+//  if (qos != 0) _client.add(packetIdBytes, 2);
+  if (qos != 0) for (int i = 0; i < 2; i++)
+  {
+    buffer[bufferpointer] = packetIdBytes[i];
+    bufferpointer++;
+  }
+
+//  if (payload != nullptr) _client.add(payload, payloadLength);
+   if (payload != nullptr) for (uint16_t i = 0; i < payloadLength; i++)
+  {
+    buffer[bufferpointer] = payload[i];
+    bufferpointer++;
+  }
+
+//  _client.send();
+  _tcpbuffer.write(buffer, bufferpointer);
   _lastClientActivity = millis();
 
   SEMAPHORE_GIVE();
